@@ -13,7 +13,7 @@
 #include <Wire.h>
 #include <ACROBOTIC_SSD1306.h>
 
-class ArdulibRenderer : Renderer
+class ArdulibRenderer : public Renderer
 {
 public:
 
@@ -21,6 +21,9 @@ public:
 	ArdulibRenderer();
 	virtual void setup();
 	virtual void render(byte* bytes, unsigned int screenWidth, unsigned int screenHeight);
+	virtual void clearScreen();
+	virtual void drawByteSprite(byte* bytes, unsigned int xBytePos, unsigned int yBytePos);
+	virtual void drawSmallByte(byte* byte, unsigned int xBytePos, unsigned int yBytePos);
 };
 
 #endif

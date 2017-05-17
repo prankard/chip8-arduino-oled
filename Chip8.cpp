@@ -13,15 +13,43 @@ void Chip8::setup()
 #ifdef DEBUG_CHIP8
     Serial.begin(9600);
 #endif
-	_rom = rom;
-    
+	//_rom = rom;
+
     clearScreen();
     programCounter = START_ADDRESS;
+
+	lastTime = millis();
 }
 
 void Chip8::step()
 {
+	if (end)
+	{
+		gamepad->getInputs(keys);
+		for (int i = 0; i < KEYS_LENGTH; i++)
+		{
+			if (keys[i])
+			{
+				reset();
+				break;
+			}
+		}
+		return;
+	}
+
+	millis();
     interpretOpcode(currentOpcode());
+	gamepad->getInputs(keys);
+
+	unsigned long now = millis();
+	unsigned long diff = lastTime - now;
+	diff *= 0.60;
+	if (delayTimer > diff)
+		delayTimer -= diff;
+	else
+		delayTimer = 0;
+//	delayTimer -= diff * 0.06;
+	lastTime = now;
 }
 
 unsigned int Chip8::currentOpcode()
@@ -34,6 +62,7 @@ unsigned int Chip8::currentOpcode()
     Serial.println(getByte(programCounter + 1), HEX);
     Serial.println(opcode, HEX);
 #endif
+	//Serial.println(opcode, HEX);
     return opcode;
 }
 
@@ -44,6 +73,8 @@ void Chip8::clearScreen()
 
     for(unsigned int i = 0; i < sizeof(displayBytes)/sizeof(displayBytes[0]); i++)
         displayBytes[i] = 0x0;
+
+	renderer->clearScreen();
 }
 		
 void Chip8::nextOpcode()
@@ -78,8 +109,7 @@ void Chip8::interpretOpcode(unsigned int opcode)
             nextOpcode();
             return;
         case 0x00EE: //Return from subroutine
-            stackIndex--;
-            programCounter = stack[stackIndex];
+            programCounter = stack[--stackIndex];
             stack[stackIndex] = 0;
 #ifdef DEBUG_CHIP8
             Serial.println("Exit subroutine");
@@ -99,11 +129,16 @@ void Chip8::interpretOpcode(unsigned int opcode)
     switch (a)
     {
         case 0x0: // Calls RCA 1802 program at address
+			end = true;
             break;
         case 0x1: // Jump to address
+			if (programCounter == address)
+				end = true;
+
             programCounter = address;
             return;
         case 0x2: // Calls a subroutine at addressnextOpcode();
+			nextOpcode();
             stack[stackIndex++] = programCounter;
             programCounter = address;       
             return;
@@ -184,6 +219,7 @@ void Chip8::interpretOpcode(unsigned int opcode)
                     // TODO: This?
                     // 8XY7	Sets VX to VY minus VX. VF is set to 0 when there's a borrow, and 1 when there isn't.
                     //nextOpcode();
+					Serial.println("Not implemented 0x7");
                     break;
                 case 0xE:
                     // TODO: This?
@@ -191,6 +227,7 @@ void Chip8::interpretOpcode(unsigned int opcode)
                     //v[0xF] = v[b] & 1;
                     //v[b] = (v[b] << 1) % 256;
                     //nextOpcode();
+					Serial.println("Not implemented 0xE");
                     break;
             }
             break;
@@ -226,10 +263,13 @@ void Chip8::interpretOpcode(unsigned int opcode)
             Serial.println(d);
 #endif
             v[0xf] = 0;
-            for (int row = 0; row < d; row++)
-            {
-                v[0xf] = v[0xf] | drawSprite(v[b] % 64, (v[c] + row) % displayHeight, getByte(i++));
-            }
+			{
+				int drawAddress = i;
+				for (int row = 0; row < d; row++)
+				{
+					v[0xf] = v[0xf] | drawSprite(v[b] % 64, (v[c] + row) % displayHeight, getByte(drawAddress++));
+				}
+			}
             nextOpcode();
             return;
             //*/
@@ -266,6 +306,7 @@ void Chip8::interpretOpcode(unsigned int opcode)
                         {
                             v[b] = k;
                             nextOpcode();
+							break;
                         }
                     }
                     return;
@@ -308,28 +349,22 @@ void Chip8::interpretOpcode(unsigned int opcode)
                         * (In other words, take the decimal representation of VX, 
                         * place the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.)
                         */
-                    //TODO Write bytes
-                    /*
-                    var decimalString:String = v[b].toString();
-                    var hundreds:Number = Number(decimalString.charAt(decimalString.length - 3));
-                    var tens:Number = Number(decimalString.charAt(decimalString.length - 2));
-                    var ones:Number = Number(decimalString.charAt(decimalString.length - 1));
-                    if (DEBUG) trace("stored v["+b+"](" + v[b] + "): " + hundreds, tens, ones + " into memory in i(" + i + "), i+1, i+2");
-                    memory.position = i;
-                    memory.writeByte(hundreds);
-                    memory.writeByte(tens);
-                    memory.writeByte(ones);
-                    */
-                    nextOpcode();
+					{
+						int decimal = v[b];
+						int hundred = decimal / 100;
+						int tens = (decimal / 10) % 10;
+						int ones = (decimal % 100) % 10;
+
+						setByte(i, hundred);
+						setByte(i + 1, tens);
+						setByte(i + 2, ones);
+					}
+					nextOpcode();
                     return;
                 case 0x55: // FX55	Stores V0 to VX in memory starting at address I
-                    // TODO: Write memory
-                    /*
-                    if (DEBUG) trace("Storing V0 - V" + b + " into memory starting at i:" + i);
-                    memory.position = i;
-                    for (j = 0; j <= b; j++)
-                        memory.writeByte(v[j]);
-                    */
+					for (j = 0; j <= b; j++)
+						setByte(i, v[j]);
+
                     nextOpcode();
                     return;
                 case 0x65: // FX65	Fills V0 to VX with values from memory starting at address I
@@ -344,6 +379,8 @@ void Chip8::interpretOpcode(unsigned int opcode)
 
     }
 
+	Serial.println("Opcode not implemented");
+	Serial.println(opcode, HEX);
     delay(100000);
 }
 
@@ -356,6 +393,11 @@ void Chip8::interpretOpcode(unsigned int opcode)
 */
 unsigned int Chip8::drawSprite(int x, int y, unsigned int data)
 {
+	/*
+	renderer->drawSmallByte(x, y, data);
+	return;
+	*/
+
 #ifdef DEBUG_CHIP8
     Serial.println(data, BIN);
     Serial.println("---");
@@ -381,9 +423,15 @@ unsigned int Chip8::drawSprite(int x, int y, unsigned int data)
     unsigned int currentBits;
     
     int size = 16;
+	/*
+	Serial.print("x:");
+	Serial.print(x);
+	Serial.print(",y:");
+	Serial.println(y);
+	*/
     
     // Write one byte
-    if (x > displayWidth - 8)
+    if (x >= displayWidth - 8)
     {
         size = 8;
         
@@ -395,21 +443,28 @@ unsigned int Chip8::drawSprite(int x, int y, unsigned int data)
         newRender = (shape & ((data ^ currentBits) >> extraLeftBits)) | (inverseShape & combined);
         
         displayBytes[position] = newRender;
+		cacheRenderByte(position);
+//		drawSprite(position, position % 16, displayBytes[position]);
+		//Serial.println("one byte");
+		//*/
     }
     else
     {
+		//Serial.println("two bytes");
         // Write two bytes
         byte byte2 = displayBytes[position + 1];
-        combined = (byte1 << 8) | byte2;
+        combined = byte1 << 8 | byte2;
         //var shape:uint = (((0xFFFF << extraLeftBits) & 0xFFFF) >> (extraRightBits + extraLeftBits)) << extraRightBits;
         shape = 0xFF << extraRightBits;
         inverseShape = shape ^ 0xFFFF;
         currentBits = (shape & combined) >> extraRightBits;
         
         newRender = (shape & ((data ^ currentBits) << extraRightBits)) | (inverseShape & combined);
-        
+
         displayBytes[position] = (newRender >> 8);
         displayBytes[position + 1] = (newRender & 0xFF);
+		cacheRenderByte(position);
+		cacheRenderByte(position + 1);
     }
     
     //var hit:uint = (((data | currentBits) & data) == data) ? 0 : 0x1;
@@ -475,20 +530,122 @@ unsigned int Chip8::drawSprite(int x, int y, unsigned int data)
     */
 }
 
+void Chip8::cacheRenderByte(int bytePosition)
+{
+	// No cache
+	/*
+	renderByte(bytePosition);
+	return;
+	//*/
+
+	int byteWidth = displayWidth / 8;
+	int yPos = (int)(bytePosition / byteWidth);
+	int xPos = bytePosition - byteWidth * yPos;
+	int yBytePos = yPos / 8;
+	int rootByte = yBytePos * 8 * byteWidth + xPos;
+
+	// Mini cache
+	/*
+	if (lastBytePos != rootByte)
+	{
+		renderByte(lastBytePos);
+	}
+	lastBytePos = rootByte;
+	//*/
+
+	//*
+	// Mega cache
+	cache[cacheIndex] = rootByte;
+
+	cacheIndex++;
+	if (cacheIndex >= CACHE_MAX)
+	{
+		for (int i = 0; i < CACHE_MAX; i++)
+		{
+			bool last = true;
+			for (int j = i + 1; j < CACHE_MAX; j++)
+			{
+				if (cache[j] == cache[i])
+				{
+					last = false;
+					break;
+				}
+			}
+			if (last)
+				renderByte(cache[i]);
+		}
+		cacheIndex = 0;
+	}
+	//*/
+}
+
+void Chip8::renderByte(int bytePosition)
+{
+	int yPos = (int)(bytePosition * 8 / displayWidth);
+	int xPos = bytePosition - displayWidth / 8 * yPos;
+	int yBytePos = yPos / 8;
+	int yByteStartPos = yBytePos * 8;
+	byte bytes[8];
+	/*
+	Serial.println("---");
+	Serial.println(bytePosition);
+	Serial.println("---");
+	//*/
+
+	bool check = false;
+	for (int i = 0; i < 8; i++)
+	{
+		int newPos = (yByteStartPos + i) * (displayWidth / 8) + xPos;
+		bytes[i] = displayBytes[newPos];
+	}
+	
+	/*
+	Serial.println("---");
+	Serial.println(xPos);
+	Serial.println(yBytePos);
+	Serial.println("---");
+	Serial.print(bytePosition);
+	Serial.print(" = ");
+	Serial.print(xPos);
+	Serial.print("x");
+	Serial.println(yPos);
+	*/
+	renderer->drawByteSprite(bytes, xPos, yBytePos);
+}
+
 void Chip8::loadRom(byte* bytes, int length)
 {
-    //_rom = bytes;
+    _rom = bytes;
 }
 
 byte Chip8::getByte(int address)
 {
-    if (address < START_ADDRESS)
-        return FONT_DATA[address];
-    else
-        return _rom[address - START_ADDRESS];
+	if (address < START_ADDRESS)
+	{
+//		return pgm_read_byte(address);
+		return FONT_DATA[address];
+	}
+	else
+	{
+		byte b;
+		if (heap.getByte(address, b))
+		{
+			return b;
+		}
+		//return pgm_read_byte_near(address - START_ADDRESS);
+		return _rom[address - START_ADDRESS];
+	}
 }
 
 void Chip8::setByte(int address, byte value)
 {
-    _rom[address] = value;
+	heap.writeByte(address, value);
+}
+
+void Chip8::reset() 
+{
+	clearScreen();
+	programCounter = START_ADDRESS;
+	end = false;
+	heap.clear();
 }

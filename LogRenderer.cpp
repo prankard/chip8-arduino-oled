@@ -10,6 +10,11 @@ void LogRenderer::setup()
 
 }
 
+void LogRenderer::clearScreen()
+{
+
+}
+
 void LogRenderer::render(byte* displayBytes, unsigned int screenWidth, unsigned int screenHeight)
 {
 	double bytesWidth = screenWidth / 8;
@@ -47,4 +52,9 @@ void LogRenderer::render(byte* displayBytes, unsigned int screenWidth, unsigned 
 		}
 	}
 	Serial.println(" ");
+}
+
+void LogRenderer::drawByteSprite(byte* bytes, unsigned int xBytePos, unsigned int yBytePos)
+{
+
 }

@@ -88,7 +88,11 @@
     <ClInclude Include="DigitalPin.h">
       <FileType>CppCode</FileType>
     </ClInclude>
+    <ClInclude Include="Gamepad.h" />
     <ClInclude Include="LiquidCrystalRenderer.h" />
+    <ClInclude Include="LogRenderer.h" />
+    <ClInclude Include="MemoryHeap.h" />
+    <ClInclude Include="Renderer.h" />
     <ClInclude Include="__vm\.Chip8Project.vsarduino.h" />
   </ItemGroup>
   <ItemGroup>
@@ -96,7 +100,10 @@
     <ClCompile Include="ArdulibRenderer.cpp" />
     <ClCompile Include="Chip8.cpp" />
     <ClCompile Include="DigitalPin.cpp" />
+    <ClCompile Include="Gamepad.cpp" />
     <ClCompile Include="LiquidCrystalRenderer.cpp" />
+    <ClCompile Include="LogRenderer.cpp" />
+    <ClCompile Include="MemoryHeap.cpp" />
   </ItemGroup>
   <PropertyGroup>
     <DebuggerFlavor>VisualMicroDebugger</DebuggerFlavor>
